@@ -5,7 +5,7 @@ Step 1: Open the first terminal
 Press `Ctrl + `` (backtick) or go to Terminal → New Terminal
 
 Step 2: In Terminal 1 - Start the Prediction API:
-bashcd prediction_api
+cd prediction_api
 python app.py
 ```
 
@@ -20,7 +20,7 @@ Or press `Ctrl + Shift + `` (backtick)
 Or go to Terminal → New Terminal
 
 Step 4: In Terminal 2 - Start the UI:
-bashcd prediction_ui
+cd prediction_ui
 export PREDICTOR_API=http://localhost:5001/predict
 export PORT=5002
 python app.py
