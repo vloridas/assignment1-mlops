@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Banknote Check Result</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+        }
+        
+        .result-icon {
+            font-size: 80px;
+            margin-bottom: 20px;
+            animation: scaleIn 0.5s ease;
+        }
+        
+        @keyframes scaleIn {
+            from {
+                transform: scale(0);
+                opacity: 0;
+            }
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 32px;
+        }
+        
+        .result-box {
+            padding: 25px;
+            border-radius: 15px;
+            margin: 25px 0;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .result-real {
+            background: #d4edda;
+            color: #155724;
+            border: 2px solid #c3e6cb;
+        }
+        
+        .result-fake {
+            background: #f8d7da;
+            color: #721c24;
+            border: 2px solid #f5c6cb;
+        }
+        
+        .prediction-code {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            font-family: 'Courier New', monospace;
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .btn-back {
+            display: inline-block;
+            padding: 15px 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            margin-top: 20px;
+        }
+        
+        .btn-back:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+        
+        .info-text {
+            color: #666;
+            font-size: 14px;
+            margin-top: 15px;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        {% if result_text == "Real" %}
+            <div class="result-icon">✅</div>
+            <h1>Authentic Banknote</h1>
+            <div class="result-box result-real">
+                This banknote appears to be REAL
+            </div>
+        {% else %}
+            <div class="result-icon">⚠️</div>
+            <h1>Counterfeit Detected</h1>
+            <div class="result-box result-fake">
+                This banknote appears to be FAKE
+            </div>
+        {% endif %}
+        
+        <div class="prediction-code">
+            <strong>Prediction Code:</strong> {{ prediction_variable }}<br>
+            <small>(0 = Real, 1 = Fake)</small>
+        </div>
+        
+        <p class="info-text">
+            This prediction is based on wavelet transform features extracted from the banknote image.
+        </p>
+        
+        <a href="/checkbanknote" class="btn-back">Check Another Banknote</a>
+    </div>
+</body>
+</html>
