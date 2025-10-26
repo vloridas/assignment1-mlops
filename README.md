@@ -1,5 +1,4 @@
 # assignment1-mlops
-Perfect! Here's how to run both services in VS Code:
 In VS Code - Open Two Terminals
 Step 1: Open the first terminal
 
