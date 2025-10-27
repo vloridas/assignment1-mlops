@@ -32,8 +32,8 @@ model.fit(X_train, y_train, epochs=15, batch_size=8, validation_split=0.2, verbo
 
 # 6. Evaluate model
 loss, acc = model.evaluate(X_test, y_test, verbose=0)
-print(f"✅ Test accuracy: {acc:.3f}")
+print(f" Test accuracy: {acc:.3f}")
 
 # 7. Save model in the same folder
 model.save("model.keras")
-print("✅ Model saved as model.keras")
+print(" Model saved as model.keras")
