@@ -4,6 +4,10 @@ from predictor import BanknotePredictor
 
 app = Flask(__name__)
 app.config["DEBUG"] = True
+# add health endpoint
+@app.route('/health', methods=['GET'])
+def health():
+    return {'status': 'ok'}, 200
 
 @app.route('/predict', methods=['POST'])  # path of the endpoint. Accept only HTTP POST request
 def predict():
@@ -16,4 +20,4 @@ dp = BanknotePredictor()
 # The code within this conditional block will only run the python file is executed as a
 # script. See https://realpython.com/if-name-main-python/
 if __name__ == '__main__':
-    app.run(port=int(os.getenv("PORT", 5001)), host='0.0.0.0', debug=True)
+    app.run(port=int(os.getenv("PORT", 5000)), host='0.0.0.0', debug=True)

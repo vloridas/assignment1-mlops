@@ -22,10 +22,26 @@ class BanknotePredictor:
                 print("MODEL_REPO is undefined")
                 self.model = load_model('model.keras')
         
-        df = pd.read_json(StringIO(json.dumps(prediction_input)), orient='records')
-        df = df[["variance", "skewness", "curtosis", "entropy"]]
-        df = df.astype(float)
-        
+       
+        REQUIRED_COLS = ["variance", "skewness", "curtosis", "entropy"]
+
+        def _to_df(payload):
+    # Accept either a single dict or a list of dicts
+            if isinstance(payload, dict):
+                df = pd.DataFrame([payload])
+            elif isinstance(payload, list):
+                df = pd.DataFrame(payload)
+            else:
+                raise ValueError("Payload must be a dict or list of dicts")
+
+    # Enforce column order & types
+            missing = [c for c in REQUIRED_COLS if c not in df.columns]
+            if missing:
+                raise ValueError(f"Missing required keys: {missing}")
+
+            df = df[REQUIRED_COLS].astype(float)
+            return df
+        df = _to_df(prediction_input)
         y_pred = self.model.predict(df)
         logging.info(y_pred[0])
         
