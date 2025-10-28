@@ -62,7 +62,7 @@ steps:
     - |
       set -euo pipefail
       API_URL="$(cat /workspace/api_url.txt)"
-      PREDICT_URL="$$API_URL/predict"
+      PREDICT_URL="${API_URL}/predict"
       gcloud run deploy $_UI_SVC \
         --image=$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_UI_SVC:$COMMIT_SHA \
         --region=$_LOCATION --platform=managed \
@@ -80,9 +80,9 @@ steps:
       set -euo pipefail
       API_URL="$(cat /workspace/api_url.txt)"
       echo "Health check..."
-      curl -fsS "$$API_URL/health" | tee /workspace/health.json
+      curl -fsS "$API_URL/health" | tee /workspace/health.json
       echo "Sample predict..."
-      curl -fsS -X POST "$$API_URL/predict" \
+      curl -fsS -X POST "$API_URL/predict" \
         -H "Content-Type: application/json" \
         -d '{"variance":2.3,"skewness":6.7,"curtosis":-1.2,"entropy":0.5}' | tee /workspace/predict.json
       echo "Smoke tests passed."
