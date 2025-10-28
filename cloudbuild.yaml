@@ -29,7 +29,7 @@ steps:
     - --allow-unauthenticated
     - --set-env-vars=MODEL_REPO=/usr/src/myapp
     - --min-instances=0
-    - --memory=512Mi
+    - --memory=2Gi
 
 
 # ---- Get API URL & wait for health ----
