@@ -1,0 +1,40 @@
+# cloudbuild_pr.yaml
+substitutions:
+  _LOCATION: europe-west4         # <-- keep in sync with your region
+  _REPOSITORY: banknote-repo      # <-- your Artifact Registry repo
+  _API_SVC: banknote-api
+  _UI_SVC: banknote-ui
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+# --- Build API image (no push) ---
+steps:
+- name: gcr.io/cloud-builders/docker
+  id: build-api
+  dir: prediction_api
+  args:
+    ["build",
+     "-t","$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_API_SVC:pr-$SHORT_SHA",
+     "."]
+
+# --- Build UI image (no push) ---
+- name: gcr.io/cloud-builders/docker
+  id: build-ui
+  dir: prediction_ui
+  args:
+    ["build",
+     "-t","$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_UI_SVC:pr-$SHORT_SHA",
+     "."]
+
+# (Optional) super-quick API JSON sanity test without deploying:
+# Uncomment if you add tests later (e.g., tests/test_predictor.py).
+# - name: python:3.10-slim
+#   id: unit-tests
+#   dir: prediction_api
+#   entrypoint: bash
+#   args:
+#     - -c
+#     - |
+#       pip install --no-cache-dir -r requirements.txt pytest
+#       pytest -q
