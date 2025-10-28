@@ -1,0 +1,92 @@
+# cloudbuild.yaml (at repo root)
+substitutions:
+  _LOCATION: europe-west4           # change if needed
+  _REPOSITORY: banknote-repo        # Artifact Registry repo
+  _API_SVC: banknote-api
+  _UI_SVC: banknote-ui
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+# ---- Build & push API ----
+- name: gcr.io/cloud-builders/docker
+  dir: prediction_api
+  args: ["build","-t","$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_API_SVC:$COMMIT_SHA","."]
+- name: gcr.io/cloud-builders/docker
+  args: ["push","$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_API_SVC:$COMMIT_SHA"]
+
+# ---- Deploy API (PORT=5000) ----
+- name: gcr.io/google.com/cloudsdktool/cloud-sdk
+  args:
+    ["gcloud","run","deploy","$_API_SVC",
+     "--image=$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_API_SVC:$COMMIT_SHA",
+     "--region=$_LOCATION","--platform=managed",
+     "--allow-unauthenticated",
+     "--set-env-vars","PORT=5000",
+     "--min-instances=0","--memory=512Mi"]
+
+# ---- Get API URL & wait for health ----
+- name: gcr.io/google.com/cloudsdktool/cloud-sdk
+  id: GET_AND_WAIT_API
+  entrypoint: bash
+  args:
+    - -c
+    - |
+      set -euo pipefail
+      API_URL="$(gcloud run services describe $_API_SVC --region=$_LOCATION --format='value(status.url)')"
+      echo "$API_URL" > /workspace/api_url.txt
+      # Wait for health endpoint (10 x 3s)
+      for i in {1..10}; do
+        if curl -fsS "$API_URL/health" >/dev/null; then
+          echo "API healthy: $API_URL"
+          exit 0
+        fi
+        echo "Waiting for API to become healthy..."
+        sleep 3
+      done
+      echo "API did not become healthy in time"; exit 1
+
+# ---- Build & push UI ----
+- name: gcr.io/cloud-builders/docker
+  dir: prediction_ui
+  args: ["build","-t","$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_UI_SVC:$COMMIT_SHA","."]
+- name: gcr.io/cloud-builders/docker
+  args: ["push","$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_UI_SVC:$COMMIT_SHA"]
+
+# ---- Deploy UI with PREDICTOR_API pointing to API /predict ----
+- name: gcr.io/google.com/cloudsdktool/cloud-sdk
+  entrypoint: bash
+  args:
+    - -c
+    - |
+      set -euo pipefail
+      API_URL="$(cat /workspace/api_url.txt)"
+      PREDICT_URL="${API_URL}/predict"
+      gcloud run deploy $_UI_SVC \
+        --image=$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_UI_SVC:$COMMIT_SHA \
+        --region=$_LOCATION --platform=managed \
+        --allow-unauthenticated \
+        --set-env-vars=PREDICTOR_API="$PREDICT_URL" \
+        --min-instances=0 --memory=512Mi
+
+# ---- Smoke tests: /health + /predict ----
+- name: gcr.io/google.com/cloudsdktool/cloud-sdk
+  id: SMOKE_TEST
+  entrypoint: bash
+  args:
+    - -c
+    - |
+      set -euo pipefail
+      API_URL="$(cat /workspace/api_url.txt)"
+      echo "Health check..."
+      curl -fsS "$API_URL/health" | tee /workspace/health.json
+      echo "Sample predict..."
+      curl -fsS -X POST "$API_URL/predict" \
+        -H "Content-Type: application/json" \
+        -d '{"variance":2.3,"skewness":6.7,"curtosis":-1.2,"entropy":0.5}' | tee /workspace/predict.json
+      echo "Smoke tests passed."
+
+images:
+- $_LOCATION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_API_SVC:$COMMIT_SHA
+- $_LOCATION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_UI_SVC:$COMMIT_SHA
