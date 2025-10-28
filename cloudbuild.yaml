@@ -19,11 +19,17 @@ steps:
 # ---- Deploy API (PORT=5000) ----
 - name: gcr.io/google.com/cloudsdktool/cloud-sdk
   args:
-    ["gcloud","run","deploy","$_API_SVC",
-     "--image=$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_API_SVC:$COMMIT_SHA",
-     "--region=$_LOCATION","--platform=managed",
-     "--allow-unauthenticated",
-     "--min-instances=0","--memory=512Mi"]
+    - gcloud
+    - run
+    - deploy
+    - $_API_SVC
+    - --image=$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_API_SVC:$COMMIT_SHA
+    - --region=$_LOCATION
+    - --platform=managed
+    - --allow-unauthenticated
+    - --set-env-vars=MODEL_REPO=/usr/src/myapp
+    - --min-instances=0
+    - --memory=512Mi
 
 
 # ---- Get API URL & wait for health ----
