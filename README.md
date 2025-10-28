@@ -7,7 +7,7 @@ Press `Ctrl + `` (backtick) or go to Terminal → New Terminal
 Step 2: In Terminal 1 - Start the Prediction API:
 cd prediction_api
 python app.py
-```
+
 
 You should see:
 ```
