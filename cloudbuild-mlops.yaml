@@ -1,0 +1,278 @@
+# PIPELINE DEFINITION
+# Name: banknote-authentication-training-pipeline
+# Description: Building the pipeline
+# Inputs:
+#    data_bucket: str
+#    model_bucket_metadata: str
+#    model_repo: str
+#    project_id: str
+components:
+  comp-compare-model:
+    executorLabel: exec-compare-model
+    inputDefinitions:
+      artifacts:
+        new_model:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+      parameters:
+        model_bucket_metadata:
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRING
+  comp-condition-1:
+    dag:
+      tasks:
+        upload-model-to-gcs:
+          cachingOptions:
+            enableCache: true
+          componentRef:
+            name: comp-upload-model-to-gcs
+          inputs:
+            parameters:
+              model_repo:
+                componentInputParameter: pipelinechannel--model_repo
+              project_id:
+                componentInputParameter: pipelinechannel--project_id
+          taskInfo:
+            name: upload-model-to-gcs
+    inputDefinitions:
+      parameters:
+        pipelinechannel--compare-model-Output:
+          parameterType: STRING
+        pipelinechannel--model_repo:
+          parameterType: STRING
+        pipelinechannel--project_id:
+          parameterType: STRING
+  comp-train-model:
+    executorLabel: exec-train-model
+    inputDefinitions:
+      parameters:
+        data_bucket:
+          parameterType: STRING
+    outputDefinitions:
+      artifacts:
+        output_model:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+  comp-upload-model-to-gcs:
+    executorLabel: exec-upload-model-to-gcs
+    inputDefinitions:
+      parameters:
+        model_repo:
+          parameterType: STRING
+        project_id:
+          parameterType: STRING
+deploymentSpec:
+  executors:
+    exec-compare-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - compare_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'google-cloud-stroage'\
+          \  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.14.6'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef compare_model(new_model: Input[Model], model_bucket_metadata:\
+          \ str) ->str:\n    \"\"\"\n    Function compares local model to existing\
+          \ one in model bucket\n    :returns: \"NEW\" if accuracy of the new model\
+          \ is better, \"EXISTING\" if the old one is better.\n    \"\"\"\n    import\
+          \ json, tempfile, os\n    from google.cloud import storage\n\n    # Get\
+          \ new model accuracy\n    new_accuracy = float(new_model.metadata.get(\"\
+          accuracy\", 0))\n\n    # Get old model accuracy\n    bucket_name, blob_path\
+          \ = model_bucket_metadata.replace(\"gs://\", \"\").split(\"/\", 1)\n   \
+          \ client = storage.Client()\n    bucket = client.bucket(bucket_name)\n \
+          \   blob = bucket.blob(blob_path)\n\n    # Temporarily download the older\
+          \ model from the model bucket\n    tmp = tempfile.NamedTemporaryFile(delete=False)\n\
+          \    blob.download_to_filename(tmp.name)\n    with open(tmp.name, \"r\"\
+          ) as f:\n        old_metadata = json.load(f)\n\n    old_accuracy = float(old_metadata[\"\
+          accuracy\"])\n\n    os.remove(tmp.name)\n    # Check whether the new model\
+          \ outperforms the old one\n    decision = \"NEW\" if new_accuracy > old_accuracy\
+          \ else \"EXISTING\"\n    return decision\n\n"
+        image: python:3.10.7-slim
+    exec-train-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - train_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'pandas' 'tensorflow'\
+          \ 'scikit-learn' 'fsspec' 'gcsfs'  &&  python3 -m pip install --quiet --no-warn-script-location\
+          \ 'kfp==2.14.6' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"\
+          3.9\"' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef train_model(data_bucket:str, output_model: Output[Model]):\n\
+          \    \"\"\"\n    Function takes data file from the data bucket and trains\
+          \ a simple MLP model on it.\n    \"\"\"\n    import random\n    import json\n\
+          \    import pandas as pd\n    from tensorflow import keras\n    from sklearn.model_selection\
+          \ import train_test_split\n    random.seed(67)\n\n    # 1. Load dataset\
+          \ from data bucket\n    #url = \"https://archive.ics.uci.edu/ml/machine-learning-databases/00267/data_banknote_authentication.txt\"\
+          \n    cols = [\"variance\", \"skewness\", \"curtosis\", \"entropy\", \"\
+          class\"]\n    #df = pd.read_csv(url, header=None, names=cols)\n\n    df\
+          \ = pd.read_csv(f\"gs://{data_bucket}/data_banknote_authentication.txt\"\
+          , header=None, names=cols)\n\n    X = df[[\"variance\", \"skewness\", \"\
+          curtosis\", \"entropy\"]].values\n    y = df[\"class\"].values\n\n    #\
+          \ 2. Split data\n    X_train, X_test, y_train, y_test = train_test_split(X,\
+          \ y, test_size=0.2, random_state=42)\n\n    # 3. Normalize inside the model\
+          \ (so we don\u2019t need a separate scaler)\n    normalizer = keras.layers.Normalization()\n\
+          \    normalizer.adapt(X_train)\n\n    # 4. Build simple MLP model\n    model\
+          \ = keras.Sequential([\n        normalizer,\n        keras.layers.Dense(8,\
+          \ activation=\"relu\"),\n        keras.layers.Dense(4, activation=\"relu\"\
+          ),\n        keras.layers.Dense(1, activation=\"sigmoid\")\n    ])\n\n  \
+          \  model.compile(optimizer=\"adam\", loss=\"binary_crossentropy\", metrics=[\"\
+          accuracy\"])\n\n    # 5. Train model\n    model.fit(X_train, y_train, epochs=15,\
+          \ batch_size=8, validation_split=0.2, verbose=1)\n\n    # 6. Evaluate model\n\
+          \    loss, acc = model.evaluate(X_test, y_test, verbose=0)\n    print(f\"\
+          \ Test accuracy: {acc:.3f}\")\n\n    # 7. Save model in the same folder\n\
+          \    model.save(\"model.keras\")\n    print(\" Model saved as model.keras\"\
+          )\n\n    # 8. Add metadata\n    metadata = {\n        \"accuracy\": acc,\n\
+          \        \"algo\": \"MLP\",\n        \"file_type\": \".keras\"\n    }\n\n\
+          \    with open(\"model_metadata.json\", \"w\") as f:\n        json.dump(metadata,\
+          \ f, indent=4)\n\n    # 9. Attach metadata to Vertex artifact (for pipelines)\n\
+          \    output_model.metadata.update(metadata)\n\n"
+        image: python:3.10.7-slim
+    exec-upload-model-to-gcs:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - upload_model_to_gcs
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'google-cloud-storage'\
+          \  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.14.6'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef upload_model_to_gcs(project_id: str, model_repo: str):\n    '''upload\
+          \ model to gsc'''\n    from google.cloud import storage\n    from urllib.parse\
+          \ import urlparse\n    import os\n\n    # Parse bucket and prefix\n    parsed\
+          \ = urlparse(model_repo)\n    bucket_name = parsed.netloc\n    prefix =\
+          \ parsed.path.lstrip(\"/\")\n\n    client = storage.Client(project=project_id)\n\
+          \    bucket = client.bucket(bucket_name)\n\n    # --- Upload model.keras\
+          \ ---\n    model_path = \"model.keras\"\n    model_blob_name = os.path.join(prefix,\
+          \ os.path.basename(model_path))\n    bucket.blob(model_blob_name).upload_from_filename(model_path)\n\
+          \n    # --- Upload model_metadata.json ---\n    metadata_path = \"model_metadata.json\"\
+          \n    metadata_blob_name = os.path.join(prefix, os.path.basename(metadata_path))\n\
+          \    bucket.blob(metadata_blob_name).upload_from_filename(metadata_path)\n\
+          \n"
+        image: python:3.10.7-slim
+pipelineInfo:
+  description: Building the pipeline
+  name: banknote-authentication-training-pipeline
+root:
+  dag:
+    tasks:
+      compare-model:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-compare-model
+        dependentTasks:
+        - train-model
+        inputs:
+          artifacts:
+            new_model:
+              taskOutputArtifact:
+                outputArtifactKey: output_model
+                producerTask: train-model
+          parameters:
+            model_bucket_metadata:
+              componentInputParameter: model_bucket_metadata
+        taskInfo:
+          name: compare-model
+      condition-1:
+        componentRef:
+          name: comp-condition-1
+        dependentTasks:
+        - compare-model
+        inputs:
+          parameters:
+            pipelinechannel--compare-model-Output:
+              taskOutputParameter:
+                outputParameterKey: Output
+                producerTask: compare-model
+            pipelinechannel--model_repo:
+              componentInputParameter: model_repo
+            pipelinechannel--project_id:
+              componentInputParameter: project_id
+        taskInfo:
+          name: condition-1
+        triggerPolicy:
+          condition: inputs.parameter_values['pipelinechannel--compare-model-Output']
+            == 'NEW'
+      train-model:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-train-model
+        inputs:
+          parameters:
+            data_bucket:
+              componentInputParameter: data_bucket
+        taskInfo:
+          name: train-model
+  inputDefinitions:
+    parameters:
+      data_bucket:
+        parameterType: STRING
+      model_bucket_metadata:
+        parameterType: STRING
+      model_repo:
+        parameterType: STRING
+      project_id:
+        parameterType: STRING
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.14.6
