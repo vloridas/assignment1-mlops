@@ -31,9 +31,6 @@ components:
           componentRef:
             name: comp-upload-model-to-gcs
           inputs:
-            artifacts:
-              model:
-                componentInputArtifact: pipelinechannel--train-model-output_model
             parameters:
               model_repo:
                 componentInputParameter: pipelinechannel--model_repo
@@ -42,11 +39,6 @@ components:
           taskInfo:
             name: upload-model-to-gcs
     inputDefinitions:
-      artifacts:
-        pipelinechannel--train-model-output_model:
-          artifactType:
-            schemaTitle: system.Model
-            schemaVersion: 0.0.1
       parameters:
         pipelinechannel--compare-model-Output:
           parameterType: STRING
@@ -69,19 +61,10 @@ components:
   comp-upload-model-to-gcs:
     executorLabel: exec-upload-model-to-gcs
     inputDefinitions:
-      artifacts:
-        model:
-          artifactType:
-            schemaTitle: system.Model
-            schemaVersion: 0.0.1
       parameters:
         model_repo:
           parameterType: STRING
         project_id:
-          parameterType: STRING
-    outputDefinitions:
-      parameters:
-        Output:
           parameterType: STRING
 deploymentSpec:
   executors:
@@ -97,7 +80,7 @@ deploymentSpec:
         - -c
         - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
           \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
-          \ python3 -m pip install --quiet --no-warn-script-location 'google-cloud-storage'\
+          \ python3 -m pip install --quiet --no-warn-script-location 'google-cloud-stroage'\
           \  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.14.6'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
           $0\" \"$@\"\n"
@@ -113,7 +96,7 @@ deploymentSpec:
           '
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
           \ *\n\ndef compare_model(new_model: Input[Model], model_bucket_metadata:\
-          \ str) -> str:\n    \"\"\"\n    Function compares local model to existing\
+          \ str) ->str:\n    \"\"\"\n    Function compares local model to existing\
           \ one in model bucket\n    :returns: \"NEW\" if accuracy of the new model\
           \ is better, \"EXISTING\" if the old one is better.\n    \"\"\"\n    import\
           \ json, tempfile, os\n    from google.cloud import storage\n\n    # Get\
@@ -158,8 +141,8 @@ deploymentSpec:
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
           \ *\n\ndef train_model(data_bucket:str, output_model: Output[Model]):\n\
           \    \"\"\"\n    Function takes data file from the data bucket and trains\
-          \ a simple MLP model on it.\n    \"\"\"\n    import random\n    import pandas\
-          \ as pd\n    from tensorflow import keras\n    from sklearn.model_selection\
+          \ a simple MLP model on it.\n    \"\"\"\n    import random\n    import json\n\
+          \    import pandas as pd\n    from tensorflow import keras\n    from sklearn.model_selection\
           \ import train_test_split\n    random.seed(67)\n\n    # 1. Load dataset\
           \ from data bucket\n    #url = \"https://archive.ics.uci.edu/ml/machine-learning-databases/00267/data_banknote_authentication.txt\"\
           \n    cols = [\"variance\", \"skewness\", \"curtosis\", \"entropy\", \"\
@@ -179,11 +162,12 @@ deploymentSpec:
           \ batch_size=8, validation_split=0.2, verbose=1)\n\n    # 6. Evaluate model\n\
           \    loss, acc = model.evaluate(X_test, y_test, verbose=0)\n    print(f\"\
           \ Test accuracy: {acc:.3f}\")\n\n    # 7. Save model in the same folder\n\
-          \    model.save(output_model.path + \".keras\")\n\n    # 8. Add metadata\n\
-          \    metadata = {\n        \"accuracy\": acc,\n        \"algo\": \"MLP\"\
-          ,\n        \"file_type\": \".keras\"\n    }\n\n    # 9. Attach metadata\
-          \ to Vertex artifact (for pipelines)\n    output_model.metadata.update(metadata)\n\
-          \n"
+          \    model.save(\"model.keras\")\n    print(\" Model saved as model.keras\"\
+          )\n\n    # 8. Add metadata\n    metadata = {\n        \"accuracy\": acc,\n\
+          \        \"algo\": \"MLP\",\n        \"file_type\": \".keras\"\n    }\n\n\
+          \    with open(\"model_metadata.json\", \"w\") as f:\n        json.dump(metadata,\
+          \ f, indent=4)\n\n    # 9. Attach metadata to Vertex artifact (for pipelines)\n\
+          \    output_model.metadata.update(metadata)\n\n"
         image: python:3.10.7-slim
     exec-upload-model-to-gcs:
       container:
@@ -212,24 +196,18 @@ deploymentSpec:
 
           '
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
-          \ *\n\ndef upload_model_to_gcs(project_id: str, model_repo: str, model:\
-          \ Input[Model])->str:\n    \"\"\"\n    Function uploads model and metadata\
-          \ .json\n    \"\"\"\n    from google.cloud import storage\n    from urllib.parse\
-          \ import urlparse\n    import json\n    import os\n    import tempfile\n\
-          \n\n    # parse gs://...\n    p = urlparse(model_repo) if model_repo.startswith(\"\
-          gs://\") else None\n    bucket_name = (p.netloc if p else model_repo.split(\"\
-          /\",1)[0])\n    prefix = (p.path.lstrip(\"/\") if p else (model_repo.split(\"\
-          /\",1)[1] if \"/\" in model_repo else \"\"))\n\n    client = storage.Client(project=project_id)\n\
-          \    bucket = client.bucket(bucket_name)\n\n    # model path from artifact\n\
-          \    ext = str(model.metadata.get(\"file_type\", \".keras\"))\n    algo\
-          \ = str(model.metadata.get(\"algo\", \"model\"))\n    src_model = model.path\
-          \ + ext\n    dst_model = \"/\".join(filter(None, [prefix, f\"{algo}_model{ext}\"\
-          ]))\n    bucket.blob(dst_model).upload_from_filename(src_model)\n\n    #\
-          \ create & upload metadata json from artifact metadata\n    meta = dict(model.metadata)\n\
-          \    with tempfile.NamedTemporaryFile(\"w\", delete=False) as f:\n     \
-          \   json.dump(meta, f, indent=4)\n        tmp_meta = f.name\n    dst_meta\
-          \ = \"/\".join(filter(None, [prefix, \"model_metadata.json\"]))\n    bucket.blob(dst_meta).upload_from_filename(tmp_meta)\n\
-          \n    return f\"gs://{bucket_name}/{dst_model}\"\n\n"
+          \ *\n\ndef upload_model_to_gcs(project_id: str, model_repo: str):\n    '''upload\
+          \ model to gsc'''\n    from google.cloud import storage\n    from urllib.parse\
+          \ import urlparse\n    import os\n\n    # Parse bucket and prefix\n    parsed\
+          \ = urlparse(model_repo)\n    bucket_name = parsed.netloc\n    prefix =\
+          \ parsed.path.lstrip(\"/\")\n\n    client = storage.Client(project=project_id)\n\
+          \    bucket = client.bucket(bucket_name)\n\n    # --- Upload model.keras\
+          \ ---\n    model_path = \"model.keras\"\n    model_blob_name = os.path.join(prefix,\
+          \ os.path.basename(model_path))\n    bucket.blob(model_blob_name).upload_from_filename(model_path)\n\
+          \n    # --- Upload model_metadata.json ---\n    metadata_path = \"model_metadata.json\"\
+          \n    metadata_blob_name = os.path.join(prefix, os.path.basename(metadata_path))\n\
+          \    bucket.blob(metadata_blob_name).upload_from_filename(metadata_path)\n\
+          \n"
         image: python:3.10.7-slim
 pipelineInfo:
   description: Building the pipeline
@@ -260,13 +238,7 @@ root:
           name: comp-condition-1
         dependentTasks:
         - compare-model
-        - train-model
         inputs:
-          artifacts:
-            pipelinechannel--train-model-output_model:
-              taskOutputArtifact:
-                outputArtifactKey: output_model
-                producerTask: train-model
           parameters:
             pipelinechannel--compare-model-Output:
               taskOutputParameter:
