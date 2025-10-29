@@ -53,4 +53,4 @@ Your terminal panel should look like this:
 │ Running on 127.0.0.1:5001    │  Running on 127.0.0.1:5002  │
 └─────────────────────────────────────────────┘
 You can switch between terminals by clicking on their tabs in the terminal panel!
-Now both services should be running and communicating with each other. Try submitting the form again! 🚀
+Now both services should be running and communicating with each other. Try submitting the form again! 
