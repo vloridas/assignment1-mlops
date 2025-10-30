@@ -93,6 +93,45 @@ steps:
         -d '{"variance":2.3,"skewness":6.7,"curtosis":-1.2,"entropy":0.5}' | tee /workspace/predict.json
       echo "Smoke tests passed."
 
+# ---- Execute ML Training Pipeline ----
+- name: gcr.io/google.com/cloudsdktool/cloud-sdk
+  id: SUBMIT_VERTEX_PIPELINE
+  entrypoint: bash
+  args:
+    - -c
+    - |
+      set -euo pipefail
+      
+      # Install required Python packages with --break-system-packages flag
+      pip install --break-system-packages kfp google-cloud-aiplatform
+      
+      # Submit the pipeline to Vertex AI
+      python3 <<EOF
+      from google.cloud import aiplatform
+      
+      aiplatform.init(
+          project='$PROJECT_ID',
+          location='$_LOCATION'
+      )
+      
+      # Create pipeline job
+      job = aiplatform.PipelineJob(
+          display_name='banknote-training-pipeline',
+          template_path='cloudbuild-mlops.yaml',
+          pipeline_root='gs://ass1_temp_bucket',
+          enable_caching=False,
+          parameter_values={
+              'project_id': '$PROJECT_ID',
+              'data_bucket': 'gs://ass1_data_bucket',
+              'model_repo': 'gs://ass1_model_bucket',
+              'model_bucket_metadata': 'gs://ass1_model_bucket/model_metadata.json'
+          }
+      )
+      
+      # Run the pipeline
+      job.submit()
+      print(f"Pipeline submitted: {job.resource_name}")
+      EOF
 
 
 images:
